@@ -725,6 +725,38 @@ impl Parser {
         }
     }
 
+    /// Create a parser from the tokens of `sql` that the caller keeps, without copying their
+    /// text: each token whose text is its own span of `sql` reads it from one shared copy.
+    ///
+    /// The parser has no source attached, so it builds the same AST as [`Parser::with_config`].
+    pub fn with_config_from_tokens(sql: &str, tokens: &[Token], config: ParserConfig) -> Self {
+        let end = tokens
+            .iter()
+            .position(|token| token.token_type == TokenType::Eof)
+            .unwrap_or(tokens.len());
+        let eof_followed_by = tokens
+            .get(end + 1)
+            .map(|token| (token.token_type, token.span));
+        let source: Arc<str> = Arc::from(sql);
+        let tokens = tokens[..end]
+            .iter()
+            .map(|token| ParserToken::from_kept(token, &source))
+            .collect();
+        Self {
+            tokens,
+            eof_followed_by,
+            current: 0,
+            config,
+            source: None,
+            pending_leading_comments: Vec::new(),
+            guards_checked: false,
+            token_guard_stats: None,
+            if_expr_ruled_out: HashSet::new(),
+            parsing_duckdb_json_path: false,
+            recursion: Arc::default(),
+        }
+    }
+
     /// Create a parser with source SQL attached.
     ///
     /// The original SQL text is stored so that `Command` expressions (unparsed

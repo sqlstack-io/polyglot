@@ -185,6 +185,29 @@ impl From<Token> for ParserToken {
     }
 }
 
+impl ParserToken {
+    /// `token` for the parser, reading its text from `source` when it is the token's span.
+    pub(crate) fn from_kept(token: &Token, source: &Arc<str>) -> Self {
+        let (start, end) = (token.span.start, token.span.end);
+        let text = if source.get(start..end) == Some(token.text.as_str()) {
+            ParserTokenText::Source {
+                source: Arc::clone(source),
+                start,
+                end,
+            }
+        } else {
+            ParserTokenText::Owned(token.text.clone())
+        };
+        Self {
+            token_type: token.token_type,
+            span: token.span,
+            comments: token.comments.clone(),
+            trailing_comments: token.trailing_comments.clone(),
+            text,
+        }
+    }
+}
+
 trait TokenOutput: Sized {
     fn from_source(
         token_type: TokenType,
@@ -1742,9 +1765,53 @@ struct TokenizerState<'a, C, T> {
     comments: Vec<String>,
     guard_stats: Option<TokenGuardStats>,
     config: &'a TokenizerConfig,
+    ascii: AsciiLookups,
+}
+
+/// The single-character token and identifier-quote maps indexed by ASCII byte, so the
+/// per-token checks skip hashing.
+struct AsciiLookups {
+    single_tokens: [Option<TokenType>; 128],
+    identifier_ends: [Option<char>; 128],
+}
+
+impl AsciiLookups {
+    fn new(config: &TokenizerConfig) -> Self {
+        let mut lookups = Self {
+            single_tokens: [None; 128],
+            identifier_ends: [None; 128],
+        };
+        for (&character, &token_type) in &config.single_tokens {
+            if character.is_ascii() {
+                lookups.single_tokens[character as usize] = Some(token_type);
+            }
+        }
+        for (&start, &end) in &config.identifiers {
+            if start.is_ascii() {
+                lookups.identifier_ends[start as usize] = Some(end);
+            }
+        }
+        lookups
+    }
 }
 
 impl<'a, C: TokenizerCursor, T: TokenOutput> TokenizerState<'a, C, T> {
+    fn single_token(&self, character: char) -> Option<TokenType> {
+        if character.is_ascii() {
+            self.ascii.single_tokens[character as usize]
+        } else {
+            self.config.single_tokens.get(&character).copied()
+        }
+    }
+
+    fn identifier_end(&self, character: char) -> Option<char> {
+        if character.is_ascii() {
+            self.ascii.identifier_ends[character as usize]
+        } else {
+            self.config.identifiers.get(&character).copied()
+        }
+    }
+
     fn new(sql: &'a str, config: &'a TokenizerConfig, cursor: C) -> Self {
         let size = cursor.len();
         Self {
@@ -1760,6 +1827,7 @@ impl<'a, C: TokenizerCursor, T: TokenOutput> TokenizerState<'a, C, T> {
             comments: Vec::new(),
             guard_stats: None,
             config,
+            ascii: AsciiLookups::new(config),
         }
     }
 
@@ -1778,6 +1846,7 @@ impl<'a, C: TokenizerCursor, T: TokenOutput> TokenizerState<'a, C, T> {
             comments: Vec::new(),
             guard_stats: Some(TokenGuardStats::default()),
             config,
+            ascii: AsciiLookups::new(config),
         }
     }
 
@@ -2328,13 +2397,13 @@ impl<'a, C: TokenizerCursor, T: TokenOutput> TokenizerState<'a, C, T> {
         // This must come before identifier quotes check
         if c == '"'
             && self.config.quotes.contains_key("\"")
-            && !self.config.identifiers.contains_key(&'"')
+            && self.identifier_end('"').is_none()
         {
             return self.scan_double_quoted_string();
         }
 
         // Check for identifier quotes
-        if let Some(&end_quote) = self.config.identifiers.get(&c) {
+        if let Some(end_quote) = self.identifier_end(c) {
             return self.scan_quoted_identifier(end_quote);
         }
 
@@ -2424,7 +2493,7 @@ impl<'a, C: TokenizerCursor, T: TokenOutput> TokenizerState<'a, C, T> {
         }
 
         // Check for single character tokens
-        if let Some(&token_type) = self.config.single_tokens.get(&c) {
+        if let Some(token_type) = self.single_token(c) {
             self.advance();
             self.add_token(token_type);
             return Ok(());
