@@ -2395,10 +2395,7 @@ impl<'a, C: TokenizerCursor, T: TokenOutput> TokenizerState<'a, C, T> {
 
         // Check for double-quoted strings when dialect supports them (e.g., BigQuery)
         // This must come before identifier quotes check
-        if c == '"'
-            && self.config.quotes.contains_key("\"")
-            && self.identifier_end('"').is_none()
-        {
+        if c == '"' && self.config.quotes.contains_key("\"") && self.identifier_end('"').is_none() {
             return self.scan_double_quoted_string();
         }
 

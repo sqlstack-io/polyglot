@@ -3695,7 +3695,7 @@ impl Parser {
                         let star_trailing_comments = self.previous_trailing_comments().to_vec();
                         let star =
                             self.parse_star_modifiers_with_comments(None, star_trailing_comments)?;
-                        Expression::Star(star)
+                        Expression::Star(Box::new(star))
                     };
                 // ClickHouse: * APPLY(func) or * APPLY func or * APPLY(x -> expr) column transformer
                 if matches!(
@@ -4283,14 +4283,14 @@ impl Parser {
             self.parse_select_expressions()?
         } else {
             // No explicit SELECT means SELECT *
-            vec![Expression::Star(crate::expressions::Star {
+            vec![Expression::Star(Box::new(crate::expressions::Star {
                 table: None,
                 except: None,
                 replace: None,
                 rename: None,
                 trailing_comments: Vec::new(),
                 span: None,
-            })]
+            }))]
         };
 
         // Parse PREWHERE clause (ClickHouse specific)
@@ -34464,7 +34464,7 @@ impl Parser {
         if self.match_token(TokenType::Dot) {
             if self.match_token(TokenType::Star) {
                 let star = self.parse_star_modifiers(Some(ident))?;
-                let mut star_expr = Expression::Star(star);
+                let mut star_expr = Expression::Star(Box::new(star));
                 if matches!(
                     self.config.dialect,
                     Some(crate::dialects::DialectType::ClickHouse)
@@ -35010,14 +35010,14 @@ impl Parser {
             if let Expression::Count(ref count_expr) = func {
                 if count_expr.distinct {
                     let this_expr = count_expr.this.clone().unwrap_or_else(|| {
-                        Expression::Star(crate::expressions::Star {
+                        Expression::Star(Box::new(crate::expressions::Star {
                             table: None,
                             except: None,
                             replace: None,
                             rename: None,
                             trailing_comments: Vec::new(),
                             span: None,
-                        })
+                        }))
                     });
                     return Ok(Expression::ApproxDistinct(Box::new(
                         crate::expressions::AggFunc {
@@ -35231,14 +35231,14 @@ impl Parser {
                         // Create an ILike expression with Star as left side
                         Expression::ILike(Box::new(LikeOp {
                             negated: false,
-                            left: Expression::Star(Star {
+                            left: Expression::Star(Box::new(Star {
                                 table: None,
                                 except: None,
                                 replace: None,
                                 rename: None,
                                 trailing_comments: Vec::new(),
                                 span: None,
-                            }),
+                            })),
                             right: pattern,
                             escape: None,
                             quantifier: None,
@@ -35247,7 +35247,7 @@ impl Parser {
                     } else {
                         // {*} or {* EXCLUDE ...}
                         let star = self.parse_star_modifiers(None)?;
-                        Expression::Star(star)
+                        Expression::Star(Box::new(star))
                     }
                 } else {
                     // {tbl.*} - table qualified wildcard
@@ -35255,7 +35255,7 @@ impl Parser {
                     self.expect(TokenType::Dot)?;
                     self.expect(TokenType::Star)?;
                     let star = self.parse_star_modifiers(Some(table_name))?;
-                    Expression::Star(star)
+                    Expression::Star(Box::new(star))
                 };
 
                 self.expect(TokenType::RBrace)?;
@@ -36027,14 +36027,14 @@ impl Parser {
                     // Parse the argument: can be *, a regex string, or an array of column names
                     let arg = if self.check(TokenType::Star) {
                         self.skip(); // consume *
-                        Expression::Star(Star {
+                        Expression::Star(Box::new(Star {
                             table: None,
                             except: None,
                             replace: None,
                             rename: None,
                             trailing_comments: Vec::new(),
                             span: None,
-                        })
+                        }))
                     } else if let Some(lambda) = self.parse_function_lambda()? {
                         lambda
                     } else {
@@ -36060,7 +36060,7 @@ impl Parser {
             // Regular star
             self.skip(); // consume *
             let star = self.parse_star_modifiers(None)?;
-            return Ok(Expression::Star(star));
+            return Ok(Expression::Star(Box::new(star)));
         }
 
         // Generic type expressions: ARRAY<T>, MAP<K,V>, STRUCT<...>
@@ -36214,7 +36214,7 @@ impl Parser {
             if self.match_token(TokenType::Star) {
                 // case.* or top.*
                 let star = self.parse_star_modifiers(Some(ident))?;
-                return Ok(Expression::Star(star));
+                return Ok(Expression::Star(Box::new(star)));
             }
             // case.column or top.column
             let col_ident = self.expect_identifier_or_keyword_with_quoted()?;
@@ -36693,7 +36693,7 @@ impl Parser {
                     // keyword.* with potential modifiers
                     let ident = Identifier::new(name).with_span(token.span);
                     let star = self.parse_star_modifiers(Some(ident))?;
-                    return Ok(Expression::Star(star));
+                    return Ok(Expression::Star(Box::new(star)));
                 }
                 // ClickHouse: json.^path — the ^ prefix means "get all nested subcolumns"
                 if matches!(
@@ -37077,7 +37077,7 @@ impl Parser {
             self.expect(TokenType::Dot)?;
             if self.match_token(TokenType::Star) {
                 let star = self.parse_star_modifiers(Some(ident))?;
-                return Ok(Expression::Star(star));
+                return Ok(Expression::Star(Box::new(star)));
             }
             let col_ident = self.expect_identifier_or_keyword_with_quoted()?;
             let trailing_comments = self.previous_trailing_comments().to_vec();
@@ -39452,14 +39452,14 @@ impl Parser {
             crate::function_registry::ParserDispatchBehavior::HllAggregate => {
                 let distinct = self.match_token(TokenType::Distinct);
                 let args = if self.match_token(TokenType::Star) {
-                    vec![Expression::Star(Star {
+                    vec![Expression::Star(Box::new(Star {
                         table: None,
                         except: None,
                         replace: None,
                         rename: None,
                         trailing_comments: Vec::new(),
                         span: None,
-                    })]
+                    }))]
                 } else if self.check(TokenType::RParen) {
                     Vec::new()
                 } else {
@@ -41650,7 +41650,7 @@ impl Parser {
                 // e.g., COLUMNS(* EXCLUDE (empid, dept))
                 self.skip(); // consume *
                 let star = self.parse_star_modifiers(None)?;
-                let mut args = vec![Expression::Star(star)];
+                let mut args = vec![Expression::Star(Box::new(star))];
                 // ClickHouse: func(*, col1, col2) — star followed by more args
                 if self.match_token(TokenType::Comma) {
                     let rest = self.parse_function_arguments_for(Some(name))?;
@@ -42986,7 +42986,7 @@ impl Parser {
                     }
                     if table_name.is_some() {
                         let star = self.parse_star_modifiers(table_name)?;
-                        expr = Expression::Star(star);
+                        expr = Expression::Star(Box::new(star));
                         // ClickHouse: a.* APPLY(func) EXCEPT(col) REPLACE(expr AS col) in any order
                         if matches!(
                             self.config.dialect,
@@ -53068,7 +53068,7 @@ impl Parser {
                     table.span = result.as_ref().and_then(Self::reference_span);
                 }
                 let star = self.parse_star_modifiers(table_name)?;
-                result = Some(Expression::Star(star));
+                result = Some(Expression::Star(Box::new(star)));
                 break;
             }
             // Parse the field identifier - use is_identifier_or_keyword_token to allow keywords
@@ -58121,14 +58121,14 @@ impl Parser {
 
                 // Spark/Databricks: INSERT * (insert all columns)
                 if self.match_token(TokenType::Star) {
-                    elements.push(Expression::Star(crate::expressions::Star {
+                    elements.push(Expression::Star(Box::new(crate::expressions::Star {
                         table: None,
                         except: None,
                         replace: None,
                         rename: None,
                         trailing_comments: Vec::new(),
                         span: None,
-                    }));
+                    })));
                 } else
                 // Parse column list (optional)
                 if self.match_token(TokenType::LParen) {
@@ -58210,25 +58210,25 @@ impl Parser {
 
                 // Spark/Databricks: UPDATE * (update all columns)
                 if self.match_token(TokenType::Star) {
-                    elements.push(Expression::Star(crate::expressions::Star {
+                    elements.push(Expression::Star(Box::new(crate::expressions::Star {
                         table: None,
                         except: None,
                         replace: None,
                         rename: None,
                         trailing_comments: Vec::new(),
                         span: None,
-                    }));
+                    })));
                 } else if self.match_token(TokenType::Set) {
                     // Spark/Databricks: UPDATE SET * (update all columns)
                     if self.match_token(TokenType::Star) {
-                        elements.push(Expression::Star(crate::expressions::Star {
+                        elements.push(Expression::Star(Box::new(crate::expressions::Star {
                             table: None,
                             except: None,
                             replace: None,
                             rename: None,
                             trailing_comments: Vec::new(),
                             span: None,
-                        }));
+                        })));
                     } else {
                         // Parse col = value assignments manually
                         let mut assignments: Vec<Expression> = Vec::new();
@@ -60309,14 +60309,14 @@ impl Parser {
 
         match expressions {
             Some(expr) => Ok(Some(expr)),
-            None => Ok(Some(Expression::Star(Star {
+            None => Ok(Some(Expression::Star(Box::new(Star {
                 table: None,
                 except: None,
                 replace: None,
                 rename: None,
                 trailing_comments: Vec::new(),
                 span: None,
-            }))),
+            })))),
         }
     }
 
@@ -63337,14 +63337,14 @@ impl Parser {
         // Parse optional RENAME columns
         let rename = self.parse_star_rename()?;
 
-        Ok(Some(Expression::Star(Star {
+        Ok(Some(Expression::Star(Box::new(Star {
             table: None,
             except,
             replace,
             rename,
             trailing_comments: Vec::new(),
             span: None,
-        })))
+        }))))
     }
 
     /// try_parse_identifier - Try to parse an identifier, returning None if not found
@@ -63376,14 +63376,14 @@ impl Parser {
 
         let pattern = self.parse_bitwise_or()?;
         let except = self.parse_star_except()?;
-        let left = Expression::Star(Star {
+        let left = Expression::Star(Box::new(Star {
             table: None,
             except,
             replace: None,
             rename: None,
             trailing_comments: Vec::new(),
             span: None,
-        });
+        }));
         let like = LikeOp {
             negated: false,
             left,
@@ -63605,14 +63605,14 @@ impl Parser {
         let _rename_exprs = self.parse_star_op(&["RENAME"])?;
         let rename: Option<Vec<(Identifier, Identifier)>> = None; // Complex to extract from expressions
 
-        Ok(Some(Expression::Star(Star {
+        Ok(Some(Expression::Star(Box::new(Star {
             table: None,
             except,
             replace,
             rename,
             trailing_comments: Vec::new(),
             span: None,
-        })))
+        }))))
     }
 
     /// parse_stored - Implemented from Python _parse_stored
@@ -66364,14 +66364,14 @@ impl Parser {
             } else if let Some(from_table) = from_expr {
                 // Create a SELECT * FROM <table>
                 let mut select_struct = Select::new();
-                select_struct.expressions = vec![Expression::Star(Star {
+                select_struct.expressions = vec![Expression::Star(Box::new(Star {
                     table: None,
                     except: None,
                     replace: None,
                     rename: None,
                     trailing_comments: Vec::new(),
                     span: None,
-                })];
+                }))];
                 select_struct.from = Some(From {
                     expressions: vec![from_table],
                 });

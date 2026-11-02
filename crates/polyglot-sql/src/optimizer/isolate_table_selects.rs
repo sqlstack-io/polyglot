@@ -181,14 +181,14 @@ fn maybe_wrap_table(expression: Expression, schema: Option<&dyn Schema>) -> Expr
 fn wrap_table_in_subquery(table: TableRef, alias_name: &str) -> Expression {
     // Build: SELECT * FROM <table>
     let inner_select = Select::new()
-        .column(Expression::Star(Star {
+        .column(Expression::Star(Box::new(Star {
             table: None,
             except: None,
             replace: None,
             rename: None,
             trailing_comments: Vec::new(),
             span: None,
-        }))
+        })))
         .from(Expression::Table(Box::new(table)));
 
     // Wrap the SELECT in a Subquery with the original alias
