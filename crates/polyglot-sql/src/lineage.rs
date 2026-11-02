@@ -1614,14 +1614,14 @@ fn to_node_inner(
 
             let mut child = LineageNode::new(
                 format!("{}.*", name),
-                Expression::Star(crate::expressions::Star {
+                Expression::Star(Box::new(crate::expressions::Star {
                     table: star.table.clone(),
                     except: None,
                     replace: None,
                     rename: None,
                     trailing_comments: vec![],
                     span: None,
-                }),
+                })),
                 source_info.expression.as_ref().clone(),
             );
             apply_source_info_context(&mut child, name, source_info);

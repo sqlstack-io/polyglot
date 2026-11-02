@@ -89,7 +89,7 @@ pub enum Expression {
     Identifier(Identifier),
     Column(Box<Column>),
     Table(Box<TableRef>),
-    Star(Star),
+    Star(Box<Star>),
     /// Snowflake braced wildcard syntax: {*}, {tbl.*}, {* EXCLUDE (...)}, {* ILIKE '...'}
     BracedWildcard(Box<Expression>),
 
@@ -1829,14 +1829,14 @@ impl Expression {
 
     /// Create a wildcard star (`*`) expression with no EXCEPT/REPLACE/RENAME modifiers.
     pub fn star() -> Self {
-        Expression::Star(Star {
+        Expression::Star(Box::new(Star {
             table: None,
             except: None,
             replace: None,
             rename: None,
             trailing_comments: Vec::new(),
             span: None,
-        })
+        }))
     }
 
     /// Wrap this expression in an `AS` alias (e.g. `expr AS name`).

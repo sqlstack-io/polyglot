@@ -6046,14 +6046,14 @@ pub fn no_limit_order_by_union(expr: Expression) -> Result<Expression> {
 
                 // Build SELECT * FROM (UNION) AS _l_0 ORDER BY ... LIMIT ...
                 let mut select = Select::default();
-                select.expressions = vec![Expression::Star(Star {
+                select.expressions = vec![Expression::Star(Box::new(Star {
                     table: None,
                     except: None,
                     replace: None,
                     rename: None,
                     trailing_comments: Vec::new(),
                     span: None,
-                })];
+                }))];
                 select.from = Some(From {
                     expressions: vec![Expression::Subquery(Box::new(subquery))],
                 });

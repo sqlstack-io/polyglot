@@ -4305,14 +4305,14 @@ impl Dialect {
                         if let Expression::Count(ref c) = e {
                             // Build COUNT_BIG(...) as an AggregateFunction
                             let args = if c.star {
-                                vec![Expression::Star(crate::expressions::Star {
+                                vec![Expression::Star(Box::new(crate::expressions::Star {
                                     table: None,
                                     except: None,
                                     replace: None,
                                     rename: None,
                                     trailing_comments: Vec::new(),
                                     span: None,
-                                })]
+                                }))]
                             } else if let Some(ref this) = c.this {
                                 vec![this.clone()]
                             } else {
@@ -9799,14 +9799,14 @@ impl Dialect {
         }));
 
         // Outer: SELECT ARRAY_AGG(*) FROM (inner_subquery)
-        let star = Expression::Star(Star {
+        let star = Expression::Star(Box::new(Star {
             table: None,
             except: None,
             replace: None,
             rename: None,
             trailing_comments: vec![],
             span: None,
-        });
+        }));
         let array_agg = Expression::ArrayAgg(Box::new(AggFunc {
             this: star,
             distinct: false,

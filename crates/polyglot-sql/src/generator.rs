@@ -5190,7 +5190,7 @@ impl Generator {
                 };
 
                 // Build the outer select: SELECT * EXCLUDE (cols) FROM (inner)
-                let star = Expression::Star(crate::expressions::Star {
+                let star = Expression::Star(Box::new(crate::expressions::Star {
                     table: None,
                     except: Some(
                         exclude
@@ -5206,7 +5206,7 @@ impl Generator {
                     rename: None,
                     trailing_comments: Vec::new(),
                     span: None,
-                });
+                }));
 
                 let outer_select = Select {
                     vertica: None,
@@ -7661,14 +7661,14 @@ impl Generator {
         let (limit, fetch) = split_set_limit(limit);
         let mut outer_select = Select {
             vertica: None,
-            expressions: vec![Expression::Star(Star {
+            expressions: vec![Expression::Star(Box::new(Star {
                 table: None,
                 except: None,
                 replace: None,
                 rename: None,
                 trailing_comments: Vec::new(),
                 span: None,
-            })],
+            }))],
             from: Some(From {
                 expressions: vec![Expression::Subquery(Box::new(subquery))],
             }),

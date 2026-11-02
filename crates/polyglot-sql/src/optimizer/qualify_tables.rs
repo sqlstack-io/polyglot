@@ -572,28 +572,31 @@ fn is_passthrough_star_select(select: &Select) -> bool {
 }
 
 fn is_plain_star(expression: &Expression) -> bool {
+    let Expression::Star(star) = expression else {
+        return false;
+    };
     matches!(
-        expression,
-        Expression::Star(Star {
+        **star,
+        Star {
             table: None,
             except: None,
             replace: None,
             rename: None,
-            trailing_comments,
+            ref trailing_comments,
             span: None,
-        }) if trailing_comments.is_empty()
+        } if trailing_comments.is_empty()
     )
 }
 
 fn plain_star_expression() -> Expression {
-    Expression::Star(Star {
+    Expression::Star(Box::new(Star {
         table: None,
         except: None,
         replace: None,
         rename: None,
         trailing_comments: Vec::new(),
         span: None,
-    })
+    }))
 }
 
 fn is_plain_unaliased_subquery(subquery: &Subquery) -> bool {

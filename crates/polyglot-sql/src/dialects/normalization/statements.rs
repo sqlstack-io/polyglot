@@ -422,14 +422,15 @@ pub(super) fn normalize_root(expression: Expression, context: &NormalizationCont
                                 inferred_type: None,
                             }));
                         let mut new_select = crate::expressions::Select::new();
-                        new_select.expressions = vec![Expression::Star(crate::expressions::Star {
-                            table: None,
-                            except: None,
-                            replace: None,
-                            rename: None,
-                            trailing_comments: Vec::new(),
-                            span: None,
-                        })];
+                        new_select.expressions =
+                            vec![Expression::Star(Box::new(crate::expressions::Star {
+                                table: None,
+                                except: None,
+                                replace: None,
+                                rename: None,
+                                trailing_comments: Vec::new(),
+                                span: None,
+                            }))];
                         new_select.from = Some(crate::expressions::From {
                             expressions: vec![values_subquery],
                         });
@@ -476,14 +477,14 @@ pub(super) fn normalize_root(expression: Expression, context: &NormalizationCont
                             Expression::Values(Box::new(values))
                         };
                         let mut anchor = Select::new();
-                        anchor.expressions = vec![Expression::Star(Star {
+                        anchor.expressions = vec![Expression::Star(Box::new(Star {
                             table: None,
                             except: None,
                             replace: None,
                             rename: None,
                             trailing_comments: Vec::new(),
                             span: None,
-                        })];
+                        }))];
                         anchor.from = Some(From {
                             expressions: vec![source],
                         });
@@ -744,14 +745,16 @@ pub(super) fn rewrite(
                         new_ct.constraints.clear();
                         // Build: SELECT * FROM b LIMIT 0
                         let select = Expression::Select(Box::new(crate::expressions::Select {
-                            expressions: vec![Expression::Star(crate::expressions::Star {
-                                table: None,
-                                except: None,
-                                replace: None,
-                                rename: None,
-                                trailing_comments: Vec::new(),
-                                span: None,
-                            })],
+                            expressions: vec![Expression::Star(Box::new(
+                                crate::expressions::Star {
+                                    table: None,
+                                    except: None,
+                                    replace: None,
+                                    rename: None,
+                                    trailing_comments: Vec::new(),
+                                    span: None,
+                                },
+                            ))],
                             from: Some(crate::expressions::From {
                                 expressions: vec![Expression::Table(Box::new(source_table))],
                             }),
@@ -789,14 +792,16 @@ pub(super) fn rewrite(
                         aliased_source.alias = Some(Identifier::new("temp"));
                         // Build: SELECT TOP 0 * INTO a FROM b AS temp
                         let select = Expression::Select(Box::new(crate::expressions::Select {
-                            expressions: vec![Expression::Star(crate::expressions::Star {
-                                table: None,
-                                except: None,
-                                replace: None,
-                                rename: None,
-                                trailing_comments: Vec::new(),
-                                span: None,
-                            })],
+                            expressions: vec![Expression::Star(Box::new(
+                                crate::expressions::Star {
+                                    table: None,
+                                    except: None,
+                                    replace: None,
+                                    rename: None,
+                                    trailing_comments: Vec::new(),
+                                    span: None,
+                                },
+                            ))],
                             from: Some(crate::expressions::From {
                                 expressions: vec![Expression::Table(Box::new(aliased_source))],
                             }),

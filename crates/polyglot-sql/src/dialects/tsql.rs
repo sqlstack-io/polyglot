@@ -1603,14 +1603,14 @@ impl TSQLDialect {
         let predicate = Self::rewrite_column_qualifier(predicate, &outer_alias, &inner_alias)?;
 
         let mut select = Select::new();
-        select.expressions = vec![Expression::Star(Star {
+        select.expressions = vec![Expression::Star(Box::new(Star {
             table: None,
             except: None,
             replace: None,
             rename: None,
             trailing_comments: Vec::new(),
             span: None,
-        })];
+        }))];
         select.from = Some(crate::expressions::From {
             expressions: vec![source],
         });
