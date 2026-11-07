@@ -2321,7 +2321,8 @@ pub(super) fn duckdb_unsigned_integer_coercion(
 /// schema does not make its columns visible to a query.
 struct ScopedSchema<'a> {
     parent: Option<&'a dyn Schema>,
-    tables: HashMap<String, HashMap<String, DataType>>,
+    /// Each relation's columns in their output order, which column alias lists rename by position.
+    tables: HashMap<String, Vec<(String, DataType)>>,
     dialect: Option<DialectType>,
     /// Catalogue/CTE layers may delegate lookups; a SELECT's binding layer
     /// must only resolve columns from its selected relations.
@@ -2351,7 +2352,7 @@ impl<'a> ScopedSchema<'a> {
         let column = self.normalized(column, false);
         self.tables
             .get(&table)
-            .and_then(|columns| columns.get(&column))
+            .and_then(|columns| scoped_column(columns, &column))
             .cloned()
     }
 
@@ -2359,7 +2360,11 @@ impl<'a> ScopedSchema<'a> {
         let column = self.normalized(column, false);
         self.tables
             .iter()
-            .filter_map(|(table, columns)| columns.contains_key(&column).then(|| table.clone()))
+            .filter_map(|(table, columns)| {
+                scoped_column(columns, &column)
+                    .is_some()
+                    .then(|| table.clone())
+            })
             .collect()
     }
 }
@@ -2390,8 +2395,8 @@ impl Schema for ScopedSchema<'_> {
         let normalized_table = self.normalized(table, true);
         if let Some(columns) = self.tables.get(&normalized_table) {
             return Ok(columns
-                .keys()
-                .map(|name| {
+                .iter()
+                .map(|(name, _)| {
                     if self.normalized(name, false) == *name {
                         name.clone()
                     } else {
@@ -2411,9 +2416,12 @@ impl Schema for ScopedSchema<'_> {
         if table.is_empty() {
             let local_tables = self.local_tables_for_column(column);
             return match local_tables.as_slice() {
-                [local_table] => {
-                    Ok(self.tables[local_table][&self.normalized(column, false)].clone())
-                }
+                [local_table] => Ok(scoped_column(
+                    &self.tables[local_table],
+                    &self.normalized(column, false),
+                )
+                .cloned()
+                .unwrap_or(DataType::Unknown)),
                 [] if self.lookup_parent_columns => self
                     .parent
                     .ok_or_else(|| SchemaError::ColumnNotFound {
@@ -2515,6 +2523,16 @@ fn table_columns(schema: &dyn Schema, table: &str) -> OutputColumns {
             (column, data_type)
         })
         .collect()
+}
+
+/// The type of `column` among a scoped relation's columns, the last of a repeated name as a map
+/// keyed by name would keep.
+fn scoped_column<'a>(columns: &'a [(String, DataType)], column: &str) -> Option<&'a DataType> {
+    columns
+        .iter()
+        .rev()
+        .find(|(name, _)| name == column)
+        .map(|(_, data_type)| data_type)
 }
 
 fn apply_column_aliases(
@@ -3388,6 +3406,60 @@ mod tests {
                 "{dialect}: {:?}",
                 select.expressions[0].inferred_type()
             );
+        }
+    }
+
+    #[test]
+    fn test_relation_column_aliases_rename_columns_in_output_order() {
+        let casts = [
+            ("CAST(1 AS INT)", "INT"),
+            ("CAST('x' AS TEXT)", "TEXT"),
+            ("CAST(1 AS BIGINT)", "BIGINT"),
+            ("CAST(1 AS DOUBLE)", "DOUBLE"),
+            ("CAST('2020-01-01' AS DATE)", "DATE"),
+            ("CAST(1 AS SMALLINT)", "SMALLINT"),
+            ("CAST(TRUE AS BOOLEAN)", "BOOLEAN"),
+            ("CAST(1 AS DECIMAL(10, 2))", "DECIMAL(10, 2)"),
+        ];
+        let body: Vec<String> = casts
+            .iter()
+            .enumerate()
+            .map(|(position, (cast, _))| format!("{cast} AS c{position}"))
+            .collect();
+        let aliases: Vec<String> = (0..casts.len())
+            .map(|position| format!("a{position}"))
+            .collect();
+        let body = body.join(", ");
+        let aliases = aliases.join(", ");
+        for sql in [
+            format!("WITH o AS (SELECT {body}) SELECT {aliases} FROM o AS t({aliases})"),
+            format!("SELECT {aliases} FROM (SELECT {body}) AS t({aliases})"),
+        ] {
+            // Each run hashes with new keys, so an order that only happens to match fails soon.
+            for _ in 0..16 {
+                let mut expression = parse_one(&sql, DialectType::PostgreSQL).unwrap();
+                annotate_types(&mut expression, None, Some(DialectType::PostgreSQL));
+                let Expression::Select(select) = expression else {
+                    panic!("select")
+                };
+                let actual: Vec<String> = select
+                    .expressions
+                    .iter()
+                    .map(|projection| {
+                        projection
+                            .inferred_type()
+                            .map(|data_type| {
+                                crate::generator::Generator::new()
+                                    .generate(&Expression::DataType(data_type.clone()))
+                                    .unwrap_or_default()
+                            })
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                let expected: Vec<String> =
+                    casts.iter().map(|(_, name)| (*name).to_owned()).collect();
+                assert_eq!(actual, expected, "{sql}");
+            }
         }
     }
 
